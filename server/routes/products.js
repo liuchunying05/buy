@@ -20,6 +20,13 @@ router.post('/', async (req, res) => {
   try {
     console.log('接收到的商品数据:', req.body);
     
+    // 验证库存数量
+    if (req.body.stock !== undefined && req.body.stock < 0) {
+      return res.status(422).json({ 
+        errors: { stock: '库存数量不能小于0' } 
+      });
+    }
+    
     const product = new Product({
       ...req.body
     });
@@ -141,6 +148,13 @@ router.put('/:id', async (req, res) => {
     console.log('更新商品，商品ID:', productId);
     console.log('更新内容:', req.body);
     
+    // 验证库存数量
+    if (req.body.stock !== undefined && req.body.stock < 0) {
+      return res.status(422).json({ 
+        errors: { stock: '库存数量不能小于0' } 
+      });
+    }
+    
     // 查找并更新商品
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
@@ -164,6 +178,41 @@ router.put('/:id', async (req, res) => {
       return res.status(422).json({ errors });
     }
     res.status(500).json({ message: '更新商品失败: ' + error.message });
+  }
+});
+
+// 扣减商品库存
+router.patch('/:id/stock', async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { quantity } = req.body;
+    
+    if (!quantity || quantity <= 0) {
+      return res.status(422).json({ message: '扣减数量必须大于0' });
+    }
+    
+    // 查找商品并检查库存
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: '商品不存在' });
+    }
+    
+    if (product.stock < quantity) {
+      return res.status(422).json({ message: '库存不足' });
+    }
+    
+    // 扣减库存
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { $inc: { stock: -quantity } },
+      { new: true }
+    );
+    
+    console.log('库存扣减成功:', updatedProduct);
+    res.json(updatedProduct);
+  } catch (error) {
+    console.error('扣减库存失败:', error);
+    res.status(500).json({ message: '扣减库存失败: ' + error.message });
   }
 });
 

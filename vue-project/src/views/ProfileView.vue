@@ -39,11 +39,11 @@
             <el-icon><Document /></el-icon>
             <span>我的订单</span>
           </div>
-          <div class="menu-item" @click="router.push('/circle')">
+          <div class="menu-item" :class="{ active: activeTab === 'circle' }" @click="activeTab = 'circle'">
             <el-icon><Connection /></el-icon>
             <span>我的圈子</span>
           </div>
-          <div class="menu-item" @click="router.push('/cart')">
+          <div class="menu-item" :class="{ active: activeTab === 'cart' }" @click="activeTab = 'cart'">
             <el-icon><ShoppingCart /></el-icon>
             <span>我的购物车</span>
           </div>
@@ -277,6 +277,128 @@
             </div>
           </el-card>
         </div>
+
+        <!-- 我的圈子内容（同页渲染） -->
+        <div v-if="activeTab === 'circle'" class="tab-content">
+          <div class="circle-content">
+            <!-- 搜索区域 -->
+            <div class="page-header">
+              <h1 class="page-title">我的圈子</h1>
+              <div class="page-search">
+                <el-input
+                  v-model="searchKeyword"
+                  placeholder="搜索商品"
+                  clearable
+                  @keyup.enter="searchProducts"
+                >
+                  <template #append>
+                    <el-button @click="searchProducts">
+                      <el-icon><Search /></el-icon>
+                    </el-button>
+                  </template>
+                </el-input>
+              </div>
+            </div>
+
+            <!-- 我的发布 -->
+            <div class="circle-section">
+              <h2 class="section-title">我的发布</h2>
+              <div v-if="myProducts.length === 0" class="empty-tip">
+                你还没有发布过商品，去<router-link to="/publish">发布</router-link>一个吧！
+              </div>
+              <el-row :gutter="20" v-else>
+                <el-col :span="6" v-for="item in myProducts" :key="item._id">
+                  <el-card class="product-card">
+                    <div class="product-actions">
+                      <el-button type="primary" size="small" circle @click="editProduct(item)">
+                        <el-icon><Edit /></el-icon>
+                      </el-button>
+                      <el-button type="danger" size="small" circle @click="confirmDelete(item)">
+                        <el-icon><Delete /></el-icon>
+                      </el-button>
+                    </div>
+                    <div class="product-content" @click="showDetail(item)">
+                      <img :src="getImagePath(item.image)" class="product-image">
+                      <div class="product-info">
+                        <h3>{{ item.name }}</h3>
+                        <p class="price">¥{{ item.price }}</p>
+                      </div>
+                    </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+            </div>
+
+            <!-- 好友发布 -->
+            <div class="circle-section">
+              <h2 class="section-title">好友发布</h2>
+              <div v-if="friendProducts.length === 0" class="empty-tip">
+                暂无好友发布的商品，去<router-link to="/friends">添加好友</router-link>吧！
+              </div>
+              <el-row :gutter="20" v-else>
+                <el-col :span="6" v-for="item in friendProducts" :key="item._id">
+                  <el-card class="product-card" @click="showDetail(item)">
+                    <img :src="getImagePath(item.image)" class="product-image">
+                    <div class="product-info">
+                      <h3>{{ item.name }}</h3>
+                      <p class="price">¥{{ item.price }}</p>
+                      <p class="publisher">发布者: {{ item.publisherName }}</p>
+                    </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+            </div>
+          </div>
+        </div>
+
+        <!-- 我的购物车内容（同页渲染） -->
+        <div v-if="activeTab === 'cart'" class="tab-content">
+          <div class="cart-content">
+            <el-card class="profile-card">
+              <template #header>
+                <div class="card-header">
+                  <h3>我的购物车</h3>
+                  <el-button @click="goToCartPage">查看完整购物车</el-button>
+                </div>
+              </template>
+              
+              <div v-if="cartItems.length === 0" class="empty-cart">
+                <el-empty description="购物车是空的"></el-empty>
+              </div>
+              
+              <div v-else>
+                <el-table :data="cartItems" style="width: 100%">
+                  <el-table-column prop="image" label="商品图片" width="120">
+                    <template #default="scope">
+                      <img :src="getImagePath(scope.row.image)" :alt="scope.row.name" class="cart-product-image">
+                    </template>
+                  </el-table-column>
+                  
+                  <el-table-column prop="name" label="商品名称"></el-table-column>
+                  
+                  <el-table-column prop="price" label="价格" width="120">
+                    <template #default="scope">
+                      <span class="price">¥{{ scope.row.price }}</span>
+                    </template>
+                  </el-table-column>
+                  
+                  <el-table-column label="操作" width="100">
+                    <template #default="scope">
+                      <el-button type="danger" size="small" @click="removeFromCart(scope.$index)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                
+                <div class="cart-footer">
+                  <div class="total">
+                    总计: <span class="price">¥{{ cartTotal }}</span>
+                  </div>
+                  <el-button type="primary" size="large" @click="goToCheckout">结算</el-button>
+                </div>
+              </div>
+            </el-card>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -330,9 +452,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
-import { User, Connection, ShoppingCart, Lock, SwitchButton, Close, Document } from '@element-plus/icons-vue'
+import { User, Connection, ShoppingCart, Lock, SwitchButton, Close, Document, Search, Edit, Delete } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const activeTab = ref('profile') // 默认显示个人资料页
@@ -363,6 +485,27 @@ const avatarFile = ref(null)
 const orders = ref([])
 const sellerOrders = ref([])
 
+// 圈子相关数据
+const myProducts = ref([])
+const friendProducts = ref([])
+const searchKeyword = ref('')
+const loading = ref(false)
+const updating = ref(false)
+const editDialogVisible = ref(false)
+const editFormRef = ref(null)
+const editForm = reactive({
+  _id: '',
+  name: '',
+  price: 0,
+  image: '',
+  description: '',
+  imageFile: null
+})
+
+// 购物车相关数据
+const cartItems = ref([])
+const cartKey = ref('')
+
 // 计算属性：待发货订单
 const pendingOrders = computed(() => {
   return orders.value.filter(order => order.status === 'pending')
@@ -371,6 +514,11 @@ const pendingOrders = computed(() => {
 // 计算属性：已发货订单
 const shippedOrders = computed(() => {
   return orders.value.filter(order => order.status === 'shipped')
+})
+
+// 计算属性：购物车总价
+const cartTotal = computed(() => {
+  return cartItems.value.reduce((sum, item) => sum + item.price, 0)
 })
 
 // 上传头像所需的headers
@@ -705,6 +853,159 @@ const acceptOrder = (orderId) => {
   }
 }
 
+// 圈子相关方法
+// 获取自己的商品和好友的商品
+const fetchCircleProducts = async () => {
+  const userData = JSON.parse(localStorage.getItem('user') || '{}')
+  if (!userData._id) {
+    ElMessage.error('用户未登录')
+    router.push('/login')
+    return
+  }
+  loading.value = true
+  try {
+    // 获取自己发布的商品
+    const myProductsRes = await axios.get(`http://localhost:3000/api/products/user/${userData._id}`)
+    myProducts.value = myProductsRes.data.map(item => {
+      return item
+    })
+
+    // 获取好友发布的商品
+    const friendProductsRes = await axios.get(`http://localhost:3000/api/products/friends/${userData._id}`)
+    friendProducts.value = friendProductsRes.data
+  } catch (error) {
+    console.error('获取圈子商品失败:', error)
+    if (error.response) {
+      console.error('错误响应数据:', error.response.data)
+    }
+    ElMessage.error('获取商品数据失败，请重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 处理图片路径
+const getImagePath = (imagePath) => {
+  if (!imagePath) return ''
+  // 已经是完整URL的情况
+  if (imagePath.startsWith('http')) return imagePath
+  // 静态资源的情况
+  if (imagePath.startsWith('public/')) return imagePath
+  // 服务器上传的图片，确保路径正确
+  if (imagePath.startsWith('/uploads/')) {
+    return `http://localhost:3000${imagePath}`
+  }
+  
+  // 其他情况，添加基础URL
+  return `http://localhost:3000/${imagePath}`
+}
+
+// 查看商品详情
+const showDetail = (product) => {
+  router.push(`/product/${product._id || product.id}`)
+}
+
+// 搜索商品
+const searchProducts = () => {
+  if (!searchKeyword.value.trim()) {
+    fetchCircleProducts() // 如果搜索关键词为空，显示所有商品
+    return
+  }
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  // 筛选我的商品
+  myProducts.value = myProducts.value.filter(product => 
+    product.name.toLowerCase().includes(keyword) || 
+    (product.description && product.description.toLowerCase().includes(keyword))
+  )
+  // 筛选好友商品
+  friendProducts.value = friendProducts.value.filter(product => 
+    product.name.toLowerCase().includes(keyword) || 
+    (product.description && product.description.toLowerCase().includes(keyword)) ||
+    (product.publisherName && product.publisherName.toLowerCase().includes(keyword))
+  )
+}
+
+// 打开编辑对话框
+const editProduct = (product) => {
+  Object.assign(editForm, {
+    _id: product._id,
+    name: product.name,
+    price: product.price,
+    image: product.image,
+    description: product.description || '',
+    imageFile: null
+  })
+  editDialogVisible.value = true
+}
+
+// 确认删除商品
+const confirmDelete = (product) => {
+  ElMessageBox.confirm(
+    `确定要删除商品 "${product.name}" 吗？`,
+    '删除确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(() => {
+    deleteProduct(product._id)
+  }).catch(() => {
+    ElMessage.info('已取消删除')
+  })
+}
+
+// 删除商品
+const deleteProduct = async (productId) => {
+  try {
+    await axios.delete(`http://localhost:3000/api/products/${productId}`)
+    ElMessage.success('商品已成功删除')
+    
+    // 从列表中移除该商品
+    myProducts.value = myProducts.value.filter(item => item._id !== productId)
+  } catch (error) {
+    console.error('删除商品失败:', error)
+    ElMessage.error('删除失败，请重试')
+  }
+}
+
+// 购物车相关方法
+// 加载购物车数据
+const loadCartData = () => {
+  const userData = JSON.parse(localStorage.getItem('user') || '{}')
+  if (userData._id) {
+    cartKey.value = `cart_${userData._id}`
+    cartItems.value = JSON.parse(localStorage.getItem(cartKey.value) || '[]')
+  }
+}
+
+// 从购物车删除商品
+const removeFromCart = (index) => {
+  cartItems.value.splice(index, 1)
+  localStorage.setItem(cartKey.value, JSON.stringify(cartItems.value))
+  ElMessage.success('商品已移除')
+}
+
+// 跳转到完整购物车页面
+const goToCartPage = () => {
+  router.push('/cart')
+}
+
+// 跳转到结算页面
+const goToCheckout = () => {
+  if (cartItems.value.length === 0) {
+    ElMessage.warning('购物车为空，无法结算')
+    return
+  }
+  
+  // 保存购物车数据到localStorage，以便结算页面使用
+  const userData = JSON.parse(localStorage.getItem('user') || '{}')
+  localStorage.setItem(`checkout_${userData._id}`, JSON.stringify(cartItems.value))
+  
+  // 跳转到结算页面
+  router.push('/checkout')
+}
+
 onMounted(() => {
   loadUserData()
   loadOrders()
@@ -716,6 +1017,12 @@ onMounted(() => {
       'Authorization': `Bearer ${userData._id}` // 如果后端需要认证
     }
   }
+  
+  // 加载圈子数据
+  fetchCircleProducts()
+  
+  // 加载购物车数据
+  loadCartData()
 })
 </script>
 
@@ -1009,24 +1316,181 @@ onMounted(() => {
   font-size: 13px;
 }
 
-@media (max-width: 768px) {
-  .profile-container {
-    flex-direction: column;
-  }
-  
-  .profile-sidebar {
-    width: 100%;
-  }
-  
-  .order-content {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-  
-  .order-actions {
-    align-items: flex-start;
-    width: 100%;
-  }
+/* 添加悬浮按钮样式 */
+.floating-button {
+  position: fixed;
+  right: 40px;
+  bottom: 80px;
+  z-index: 1000;
+}
+
+/* 标签页内容样式 */
+.tab-content {
+  min-height: 400px;
+  padding: 20px;
+}
+
+.loading-placeholder {
+  padding: 40px;
+  text-align: center;
+}
+
+.error-message {
+  margin: 20px 0;
+}
+
+.coming-soon {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* 自定义圆形加号按钮 */
+
+/* 圈子相关样式 */
+.circle-content {
+  min-height: 400px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  color: #409EFF;
+}
+
+.page-search {
+  width: 300px;
+}
+
+.circle-section {
+  margin-bottom: 40px;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  font-size: 20px;
+  color: #303133;
+  margin-bottom: 20px;
+  border-left: 4px solid #409EFF;
+  padding-left: 10px;
+}
+
+.product-card {
+  margin-bottom: 20px;
+  transition: transform 0.3s;
+  height: 320px;
+  overflow: hidden;
+  position: relative;
+}
+
+.product-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.product-card:hover .product-actions {
+  opacity: 1;
+}
+
+.product-content {
+  cursor: pointer;
+  height: 100%;
+}
+
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+.product-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+}
+
+.product-info {
+  padding: 10px;
+}
+
+.product-info h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  height: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.price {
+  color: #f56c6c;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 5px 0;
+}
+
+.publisher {
+  font-size: 12px;
+  color: #909399;
+  margin: 5px 0 0;
+}
+
+.empty-tip {
+  text-align: center;
+  color: #909399;
+  padding: 30px 0;
+}
+
+.empty-tip a {
+  color: #409EFF;
+  text-decoration: none;
+}
+
+/* 购物车相关样式 */
+.cart-content {
+  min-height: 400px;
+}
+
+.cart-product-image {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+}
+
+.cart-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 20px;
+}
+
+.cart-footer .total {
+  font-size: 18px;
+}
+
+.empty-cart {
+  padding: 40px;
+  text-align: center;
 }
 </style> 

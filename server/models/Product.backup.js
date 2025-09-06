@@ -12,12 +12,6 @@ const productSchema = new mongoose.Schema({
     required: [true, '商品价格不能为空'],
     min: [0, '价格不能小于0']
   },
-  stock: {
-    type: Number,
-    required: [true, '商品库存不能为空'],
-    min: [0, '库存不能小于0'],
-    default: 0
-  },
   image: {
     type: String,
     required: [true, '商品图片不能为空']

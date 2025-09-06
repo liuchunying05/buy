@@ -141,8 +141,8 @@ const cancelPayment = () => {
   paymentMethod.value = ''
 }
 
-// 模拟支付完成
-const completePayment = () => {
+// 模拟支付完成（会按数量扣减商品库存）
+const completePayment = async () => {
   try {
     // 获取当前用户信息
     const userData = JSON.parse(localStorage.getItem('user') || '{}')
@@ -160,37 +160,68 @@ const completePayment = () => {
       return
     }
     
-    // 创建新订单
-    const newOrder = {
-      id: generateOrderId(),
-      date: new Date().toLocaleDateString(),
-      status: 'pending', // 待发货状态
-      buyerId: userData._id,
-      product: currentOrder.items[0], // 假设只有一个商品
-      sellerInfo: currentOrder.items[0].sellerId || 'unknown'
-    }
-    
-    // 保存到买家的订单列表
+    // 遍历每个商品分别创建订单并扣减库存
     const buyerOrders = JSON.parse(localStorage.getItem(`orders_${userData._id}`) || '[]')
-    buyerOrders.push(newOrder)
-    localStorage.setItem(`orders_${userData._id}`, JSON.stringify(buyerOrders))
-    
-    // 保存到卖家的订单列表
-    if (currentOrder.items[0].sellerId) {
-      const sellerId = currentOrder.items[0].sellerId
-      const sellerOrders = JSON.parse(localStorage.getItem(`seller_orders_${sellerId}`) || '[]')
-      sellerOrders.push({
-        ...newOrder,
-        buyerInfo: {
-          id: userData._id,
-          name: userData.username,
-          address: currentOrder.address,
-          phone: currentOrder.phone
+    for (const item of currentOrder.items) {
+      const quantity = item.quantity || 1
+      const order = {
+        id: generateOrderId(),
+        date: new Date().toLocaleDateString(),
+        status: 'pending',
+        buyerId: userData._id,
+        product: { ...item, quantity },
+        sellerInfo: item.sellerId || 'unknown'
+      }
+      buyerOrders.push(order)
+
+      if (item.sellerId) {
+        const sellerKey = `seller_orders_${item.sellerId}`
+        const sellerOrders = JSON.parse(localStorage.getItem(sellerKey) || '[]')
+        sellerOrders.push({
+          ...order,
+          buyerInfo: {
+            id: userData._id,
+            name: userData.username,
+            address: currentOrder.address,
+            phone: currentOrder.phone
+          }
+        })
+        localStorage.setItem(sellerKey, JSON.stringify(sellerOrders))
+      }
+
+      // 扣减库存：遍历所有商品并按数量扣减
+      for (const item of currentOrder.items) {
+        const quantity = item.quantity || 1
+        try {
+          if (item && item._id && (item.stock !== undefined && item.stock !== null)) {
+            // 使用新的库存扣减接口
+            const response = await fetch(`http://localhost:3000/api/products/${item._id}/stock`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quantity })
+            })
+            
+            if (!response.ok) {
+              const errorData = await response.json()
+              console.warn(`商品 ${item.name} 库存扣减失败:`, errorData.message)
+            }
+          } else if (item && (item._id || item.id)) {
+            // 兜底：如果后端没有stock字段，扣减本地存储的库存
+            const localStockKey = `stock_${item._id || item.id}`
+            const localStock = localStorage.getItem(localStockKey)
+            if (localStock !== null) {
+              const currentStock = Number(localStock)
+              const newStock = Math.max(0, currentStock - quantity)
+              localStorage.setItem(localStockKey, String(newStock))
+            }
+          }
+        } catch (e) {
+          console.error(`商品 ${item.name} 库存扣减失败(已忽略):`, e)
         }
-      })
-      localStorage.setItem(`seller_orders_${sellerId}`, JSON.stringify(sellerOrders))
+      }
     }
-    
+    localStorage.setItem(`orders_${userData._id}`, JSON.stringify(buyerOrders))
+
     // 清除订单数据
     localStorage.removeItem('current_order')
     
